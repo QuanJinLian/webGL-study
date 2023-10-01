@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>WebGL 포인트 그리기</title>
+  </head>
+  <body>
+    <canvas id="oCanvas" width="500" height="500"></canvas>
+    <script type="notjs" id="vertex">
+      // 변수 선언
+      attribute vec2  a_position;
+      attribute vec4 a_color;
+      uniform vec2 screenSize;
+
+      // fragment 필요로 인한 변수 선언
+      varying vec4 v_color;
+
+      // 메인 함수
+      void main(){
+        float x = a_position.x * 2.0 / screenSize.x - 1.0;
+        float y = 1.0 - (a_position.y * 2.0 / screenSize.y);
+        gl_Position = vec4(x, y, 0, 1);
+        gl_PointSize = 10.0;
+        v_color = a_color;
+      }
+    </script>
+    <script type="notjs" id="fragment">
+      // 기본 정밀도 설정
+      precision mediump float;
+
+      // 변수 선언
+      varying vec4 v_color;
+
+      // 메인 함수
+      void main(){
+        gl_FragColor = v_color;
+      }
+    </script>
+    <script>
+      const oCanvas = document.getElementById("oCanvas");
+
+      // context 얻어 오기
+      const gl = oCanvas.getContext("webgl");
+      if (!gl) {
+        alert("브라우저가 webgl을 사용할 수 없음!!");
+      }
+
+      // 쉐이더 초기화
+
+      // Create Shader func
+      function createShader(gl, type, src) {
+        const shader = gl.createShader(type);
+
+        // src 는 string
+        gl.shaderSource(shader, src);
+        gl.compileShader(shader);
+
+        const success = gl.getShaderParameter(shader, gl.COMPILE_STATUS);
+
+        if (success) {
+          return shader;
+        }
+
+        console.log(gl.getShaderInfoLog(shader));
+      }
+
+      // 쉐이더 스크립트 str 얻어오기
+      const vertexSrc = document.getElementById("vertex").innerText;
+      const fragmentSrc = document.getElementById("fragment").innerText;
+
+      // 쉐이더 객체 생성
+      const vertexShader = createShader(gl, gl.VERTEX_SHADER, vertexSrc);
+      const fragmentShader = createShader(gl, gl.FRAGMENT_SHADER, fragmentSrc);
+
+      // Create Program func
+      function createProgram(gl, vertexShader, fragmentShader) {
+        const program = gl.createProgram();
+
+        // program에 쉐이더 집어넣기
+        gl.attachShader(program, vertexShader);
+        gl.attachShader(program, fragmentShader);
+
+        // program에 있는 쉐이더 연결하기
+        gl.linkProgram(program);
+
+        const success = gl.getProgramParameter(program, gl.LINK_STATUS);
+        if (success) {
+          return program;
+        }
+        console.log(gl.getProgramInfoLog(program));
+      }
+
+      // 프로그램 생성 및 사용
+      const program = createProgram(gl, vertexShader, fragmentShader);
+      gl.useProgram(program);
+
+      // 배경색 초기화
+      gl.clearColor(0, 0, 1, 1);
+      gl.clear(gl.COLOR_BUFFER_BIT);
+
+      // 쉐이더 스크립트 속 변수 얻어오기
+      const a_position = gl.getAttribLocation(program, "a_position");
+      const a_color = gl.getAttribLocation(program, "a_color");
+
+      // 쉐이더 스크립트 속 uniform 변수 얻어오기 및 값 할당
+      const screenSize = gl.getUniformLocation(program, "screenSize");
+      gl.uniform2f(screenSize, oCanvas.scrollWidth, oCanvas.scrollHeight);
+
+      // event bind func
+      function bindEvt() {
+        const points = [];
+        oCanvas.onmousedown = function (e) {
+          // 배경색 초기화 및 다시 할당
+          gl.clearColor(0, 0, 1, 1);
+          gl.clear(gl.COLOR_BUFFER_BIT);
+
+          // 마우스 이벤트 좌표 얻기 및 랜덤색 생성
+          const x = e.offsetX;
+          const y = e.offsetY;
+          const color = {
+            r: Math.random(),
+            g: Math.random(),
+            b: Math.random(),
+            a: 0.5 + Math.random() * 0.5,
+          };
+
+          points.push({ x, y, color });
+
+          points.forEach((p) => {
+            // 쉐이더 스크립 속 변수 값 다시 할당 3f
+            gl.vertexAttrib3f(a_position, p.x, p.y, 0.0);
+
+            const _color = p.color;
+            // 쉐이더 스크립 속 변수 값 다시 할당 4f
+            gl.vertexAttrib4f(a_color, _color.r, _color.g, _color.b, _color.a);
+
+            // 캔버스에 점 그리기
+            gl.drawArrays(gl.POINTS, 0, 1);
+          });
+        };
+      }
+
+      bindEvt();
+    </script>
+  </body>
+</html>
