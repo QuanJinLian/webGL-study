@@ -145,79 +145,47 @@
        *
        * */
       function bindEvt() {
-        let points = [];
+        const dataBuffer = [];
         let color = getRandomColor();
         oCanvas.onmousedown = function (e) {
           const x = e.offsetX;
           const y = e.offsetY;
+          const size = 10.0;
 
-          if (points.length % 3 === 0) color = getRandomColor();
+          dataBuffer.push(x, y, size, color.r, color.g, color.b, color.a);
 
-          points.push({ x, y, color, size: 10.0 });
+          const pointsLength = dataBuffer.length / 7;
+          if (pointsLength % 3 === 0) color = getRandomColor();
 
+          // 배경 초기화
           initBackground();
 
-          let dataBuffer = [];
+          // 버퍼 데이터 묶기
+          gl.bufferData(
+            gl.ARRAY_BUFFER,
+            new Float32Array(dataBuffer),
+            gl.STATIC_DRAW
+          );
 
-          points.forEach((p, i) => {
-            dataBuffer = dataBuffer.concat([p.x, p.y, p.size]);
+          // 버퍼 데이터 지정해 주기
+          gl.vertexAttribPointer(a_position, 2, gl.FLOAT, false, 4 * 7, 0);
+          gl.vertexAttribPointer(point_size, 1, gl.FLOAT, false, 4 * 7, 4 * 2);
+          gl.vertexAttribPointer(a_color, 4, gl.FLOAT, false, 4 * 7, 4 * 3);
 
-            gl.bufferData(
-              gl.ARRAY_BUFFER,
-              new Float32Array(dataBuffer),
-              gl.STATIC_DRAW
-            );
-            gl.vertexAttribPointer(a_position, 2, gl.FLOAT, false, 4 * 3, 0);
-            gl.vertexAttribPointer(
-              point_size,
-              1,
-              gl.FLOAT,
-              false,
-              4 * 3,
-              4 * 2
-            );
+          // 버퍼 데이터 사용 가능하게 바꿔주기
+          gl.enableVertexAttribArray(a_position);
+          gl.enableVertexAttribArray(point_size);
+          gl.enableVertexAttribArray(a_color);
 
-            gl.enableVertexAttribArray(a_position);
-            gl.enableVertexAttribArray(point_size);
-            gl.vertexAttrib4f(
-              a_color,
-              p.color.r,
-              p.color.g,
-              p.color.b,
-              p.color.a
-            );
-
-            // 점이 3개 찼을 경우 삼각형 그려주기
-            if ((i + 1) % 3 === 0) {
-              gl.drawArrays(gl.TRIANGLES, 0, 3);
-
-              dataBuffer = [];
-            }
-          });
+          // 묶인 데이터 기반으로 삼각형 그리기
+          gl.drawArrays(gl.TRIANGLES, 0, Math.floor(pointsLength / 3) * 3);
 
           // 미완성 된 삼각형 점 그리기
-          if (points.length % 3 !== 0) {
-            gl.vertexAttrib2f(point_size, 10.0, 0.0);
-
-            for (let i = (points.length % 3) - 1; i >= 0; i--) {
-              const p = points[points.length - 1 - i];
-
-              gl.vertexAttrib3f(a_position, p.x, p.y, 0.0);
-
-              const _color = p.color;
-              // 쉐이더 스크립 속 변수 값 다시 할당 4f
-              gl.vertexAttrib4f(
-                a_color,
-                _color.r,
-                _color.g,
-                _color.b,
-                _color.a
-              );
-
-              // 캔버스에 점 그리기
-              gl.drawArrays(gl.POINTS, 0, points.length % 3);
-            }
-          }
+          gl.drawArrays(
+            gl.POINTS,
+            pointsLength - (pointsLength % 3),
+            pointsLength % 3
+          );
         };
       }
 
