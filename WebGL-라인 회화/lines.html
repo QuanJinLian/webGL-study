@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>WebGL-라인 회화</title>
+    <style>
+      .radio {
+        display: inline-flex;
+        align-items: center;
+      }
+      input {
+        width: auto;
+        height: 30px;
+        border-radius: 5px;
+        border: 0;
+        background-color: #999;
+      }
+      input:checked ~ label {
+        border-radius: 5px;
+        padding: 5px;
+        background-color: #333;
+        color: #fff;
+      }
+    </style>
+  </head>
+  <body>
+    <section class="buttons" style="margin-bottom: 10px">
+      <div class="radio">
+        <input type="radio" name="lineType" id="LINES" value="LINES" checked />
+        <label for="LINES">LINES</label>
+      </div>
+      <div class="radio">
+        <input
+          type="radio"
+          name="lineType"
+          id="LINE_STRIP"
+          value="LINE_STRIP"
+        />
+        <label for="LINE_STRIP">LINE_STRIP</label>
+      </div>
+      <div class="radio">
+        <input type="radio" name="lineType" id="LINE_LOOP" value="LINE_LOOP" />
+        <label for="LINE_LOOP">LINE_LOOP</label>
+      </div>
+    </section>
+    <canvas id="oCanvas" width="500" height="500"></canvas>
+    <script type="notjs" id="vertex">
+      // 변수 선언
+      attribute vec2  a_position;
+      attribute vec4 a_color;
+      uniform vec2 screenSize;
+      attribute float point_size;
+
+      // fragment 필요로 인한 변수 선언
+      varying vec4 v_color;
+
+      // 메인 함수
+      void main(){
+        float x = a_position.x * 2.0 / screenSize.x - 1.0;
+        float y = 1.0 - (a_position.y * 2.0 / screenSize.y);
+        gl_Position = vec4(x, y, 0, 1);
+        gl_PointSize = point_size;
+        v_color = a_color;
+      }
+    </script>
+    <script type="notjs" id="fragment">
+      // 기본 정밀도 설정
+      precision mediump float;
+
+      // 변수 선언
+      varying vec4 v_color;
+
+      // 메인 함수
+      void main(){
+        gl_FragColor = v_color;
+      }
+    </script>
+    <script>
+      let lineType = "LINES";
+      const oCanvas = document.getElementById("oCanvas");
+
+      // context 얻어 오기
+      const gl = oCanvas.getContext("webgl");
+      if (!gl) {
+        alert("브라우저가 webgl을 사용할 수 없음!!");
+      }
+
+      // 쉐이더 초기화
+
+      // Create Shader func
+      function createShader(gl, type, src) {
+        const shader = gl.createShader(type);
+
+        // src 는 string
+        gl.shaderSource(shader, src);
+        gl.compileShader(shader);
+
+        const success = gl.getShaderParameter(shader, gl.COMPILE_STATUS);
+
+        if (success) {
+          return shader;
+        }
+
+        console.log(gl.getShaderInfoLog(shader));
+      }
+
+      // 쉐이더 스크립트 str 얻어오기
+      const vertexSrc = document.getElementById("vertex").innerText;
+      const fragmentSrc = document.getElementById("fragment").innerText;
+
+      // 쉐이더 객체 생성
+      const vertexShader = createShader(gl, gl.VERTEX_SHADER, vertexSrc);
+      const fragmentShader = createShader(gl, gl.FRAGMENT_SHADER, fragmentSrc);
+
+      // Create Program func
+      function createProgram(gl, vertexShader, fragmentShader) {
+        const program = gl.createProgram();
+
+        // program에 쉐이더 집어넣기
+        gl.attachShader(program, vertexShader);
+        gl.attachShader(program, fragmentShader);
+
+        // program에 있는 쉐이더 연결하기
+        gl.linkProgram(program);
+
+        const success = gl.getProgramParameter(program, gl.LINK_STATUS);
+        if (success) {
+          return program;
+        }
+        console.log(gl.getProgramInfoLog(program));
+      }
+
+      // 배경색 초기화
+      function initBackground() {
+        gl.clearColor(0, 0, 1, 1);
+        gl.clear(gl.COLOR_BUFFER_BIT);
+      }
+
+      // 프로그램 생성 및 사용
+      const program = createProgram(gl, vertexShader, fragmentShader);
+      gl.useProgram(program);
+
+      initBackground();
+
+      // 쉐이더 스크립트 속 변수 얻어오기
+      const a_position = gl.getAttribLocation(program, "a_position");
+      const a_color = gl.getAttribLocation(program, "a_color");
+      const point_size = gl.getAttribLocation(program, "point_size");
+      gl.vertexAttrib4f(a_color, 1, 1, 0, 1);
+
+      // 쉐이더 스크립트 속 uniform 변수 얻어오기 및 값 할당
+      const screenSize = gl.getUniformLocation(program, "screenSize");
+      gl.uniform2f(screenSize, oCanvas.scrollWidth, oCanvas.scrollHeight);
+
+      // 버퍼 생성
+      const positionBuffer = gl.createBuffer();
+      // 버퍼 연결
+      gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+
+      /**
+       *
+       * 마우스 이벤트: 점 2개 찍었을 경우 라인 그리기
+       *
+       * */
+      let dataBuffer = [];
+      function bindEvt() {
+        let color = getRandomColor();
+        oCanvas.onmousedown = function (e) {
+          const x = e.offsetX;
+          const y = e.offsetY;
+          const size = 10.0;
+          const pointCnt = lineType === "LINES" ? 2 : 1;
+
+          dataBuffer.push(x, y, size, color.r, color.g, color.b, color.a);
+
+          const pointsLength = dataBuffer.length / 7;
+          if (pointsLength % pointCnt === 0) color = getRandomColor();
+
+          // 배경 초기화
+          initBackground();
+
+          // 버퍼 데이터 묶기
+          gl.bufferData(
+            gl.ARRAY_BUFFER,
+            new Float32Array(dataBuffer),
+            gl.STATIC_DRAW
+          );
+
+          // 버퍼 데이터 지정해 주기
+          gl.vertexAttribPointer(a_position, 2, gl.FLOAT, false, 4 * 7, 0);
+          gl.vertexAttribPointer(point_size, 1, gl.FLOAT, false, 4 * 7, 4 * 2);
+          gl.vertexAttribPointer(a_color, 4, gl.FLOAT, false, 4 * 7, 4 * 3);
+
+          // 버퍼 데이터 사용 가능하게 바꿔주기
+          gl.enableVertexAttribArray(a_position);
+          gl.enableVertexAttribArray(point_size);
+          gl.enableVertexAttribArray(a_color);
+
+          // 묶인 데이터 기반으로 라인 그리기
+          gl.drawArrays(
+            gl[lineType],
+            0,
+            Math.floor(pointsLength / pointCnt) * pointCnt
+          );
+
+          // 미완성 된 삼각형 점 그리기
+          gl.drawArrays(
+            gl.POINTS,
+            pointsLength - (pointCnt === 1 ? 1 : pointsLength % pointCnt),
+            pointCnt === 1 ? 1 : pointsLength % pointCnt
+          );
+        };
+      }
+
+      function getRandomColor() {
+        return {
+          r: Math.random(),
+          g: Math.random(),
+          b: Math.random(),
+          a: 0.5 + Math.random() * 0.5,
+        };
+      }
+
+      bindEvt();
+
+      function clearCanvas() {
+        initBackground();
+        gl.drawArrays(gl.LINES, 0, 0);
+        dataBuffer = [];
+      }
+
+      const inputs = document.getElementsByTagName("INPUT");
+      function bindInputEvt() {
+        for (let i = 0; i < inputs.length; i++) {
+          inputs[i].onchange = (e) => {
+            lineType = e.target.value;
+            clearCanvas();
+          };
+        }
+      }
+      bindInputEvt();
+    </script>
+  </body>
+</html>
