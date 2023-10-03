@@ -10,4 +10,5 @@
   ![Alt text](assets/lineType.png)
 
 효과
+
 ![Alt text](assets/result.gif)
